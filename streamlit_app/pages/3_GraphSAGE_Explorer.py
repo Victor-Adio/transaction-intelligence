@@ -102,12 +102,46 @@ with st.spinner("Loading embeddings and graph edges…"):
      txn_to_merch, txn_to_user, merch_to_txn, user_to_txn,
      meta_merch, meta_user) = _load_data()
 
-st.success(
-    f"Loaded  **{len(txn_risk):,}** transaction · "
-    f"**{len(merch_embs):,}** merchant · "
-    f"**{len(user_embs):,}** user embeddings  |  "
-    f"**{sum(len(v) for v in merch_to_txn.values()):,}** merchant–transaction edges"
-)
+# ── Connection diagnostics ───────────────────────────────────────────────────
+_tg = _get_tg_client()
+with st.expander("🔌 TigerGraph connection status", expanded=(_tg is None)):
+    if _tg is None:
+        from services.connection import load_saved_connection
+        cfg = load_saved_connection()
+        st.error("**TigerGraph client could not be built.**")
+        st.markdown(f"- Host: `{cfg.get('host', 'not found')}`")
+        st.markdown(f"- Secret present: `{'yes' if cfg.get('password') else 'NO — check Streamlit Cloud Secrets'}`")
+    else:
+        ping = _tg.ping()
+        if ping["ok"]:
+            st.success(f"Connected · `{_tg.host}` / `{_tg.graphname}`")
+            if ping["has_embedding"]:
+                st.success("✅ `embedding` attribute visible — fetching from TigerGraph.")
+            else:
+                st.warning(f"⚠️ `embedding` not in vertex attributes. Keys returned: `{ping['attribute_keys']}`")
+        else:
+            st.error(f"Connection error: `{ping['error']}`")
+
+# ── Guard: stop here if no embeddings loaded ─────────────────────────────────
+if not merch_embs or not user_embs:
+    st.warning(
+        "**No embeddings available.** The GraphSAGE Explorer needs merchant and user "
+        "embedding vectors to run.\n\n"
+        "Check the connection status panel above. If TigerGraph is connected but the "
+        "`embedding` attribute is not returned, you will need to run the embedding "
+        "generation scripts locally and commit the CSV files, or install a GSQL query "
+        "that returns the vector attributes.",
+        icon="⚠️",
+    )
+    st.stop()
+
+if merch_embs:
+    st.success(
+        f"Loaded  **{len(txn_risk):,}** transaction · "
+        f"**{len(merch_embs):,}** merchant · "
+        f"**{len(user_embs):,}** user embeddings  |  "
+        f"**{sum(len(v) for v in merch_to_txn.values()):,}** merchant–transaction edges"
+    )
 
 # ── Tabs ───────────────────────────────────────────────────────────────────
 tab_merch, tab_user, tab_cold, tab_2hop, tab_explain = st.tabs([
