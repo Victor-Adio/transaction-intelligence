@@ -77,6 +77,36 @@ def _get_tg_client():
 
 tg_client = _get_tg_client()
 
+# ── Connection diagnostics ───────────────────────────────────────────────────
+with st.expander("🔌 TigerGraph connection status", expanded=tg_client is None):
+    if tg_client is None:
+        from services.connection import load_saved_connection
+        cfg = load_saved_connection()
+        st.error("**TigerGraph client could not be built.**")
+        st.markdown(f"- Host detected: `{cfg.get('host', 'not found')}`")
+        st.markdown(f"- Graph: `{cfg.get('graph_name', 'not found')}`")
+        st.markdown(f"- Secret present: `{'yes' if cfg.get('password') else 'NO — this is the problem'}`")
+        st.markdown(
+            "**Fix:** Go to Streamlit Cloud → your app → ⋮ → Settings → Secrets "
+            "and make sure `[tigergraph]` section is filled in with `host`, `graph_name`, `username`, `secret`, `use_ssl`."
+        )
+    else:
+        ping = tg_client.ping()
+        if ping["ok"]:
+            st.success(f"Connected to `{tg_client.host}` / graph `{tg_client.graphname}`")
+            st.markdown(f"- Sample vertex ID: `{ping['vertex_id']}`")
+            st.markdown(f"- Attributes returned: `{ping['attribute_keys']}`")
+            if ping["has_embedding"]:
+                st.success("✅ `embedding` vector attribute is visible — embeddings will be fetched from TigerGraph.")
+            else:
+                st.warning(
+                    "⚠️ `embedding` attribute **not returned** by the REST++ vertex endpoint. "
+                    "TigerGraph may not expose VECTOR attributes via `/restpp/graph/.../vertices`. "
+                    "You may need to run the embedding generation scripts locally."
+                )
+        else:
+            st.error(f"Connection failed: `{ping['error']}`")
+
 # ── Render ──────────────────────────────────────────────────────────────────
 with st.spinner("Computing UMAP projection… first run ~20 seconds"):
     try:

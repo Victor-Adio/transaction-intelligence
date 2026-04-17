@@ -55,10 +55,11 @@ class TigerGraphDemoClient:
         path: str,
         method: str = "GET",
         _allow_missing: bool = False,
+        timeout: int = 60,
         **kwargs: Any,
     ) -> Any:
         url = f"{self.host}/restpp/{path}"
-        r = self._session.request(method, url, timeout=30, **kwargs)
+        r = self._session.request(method, url, timeout=timeout, **kwargs)
         if _allow_missing and r.status_code == 404:
             log.warning("Query not found (404): %s — is it installed on TigerGraph?", path)
             return {"results": [], "_missing": True}
@@ -105,6 +106,26 @@ class TigerGraphDemoClient:
             params=params,
         )
         return result.get("results", []) if isinstance(result, dict) else []
+
+    def ping(self) -> dict[str, Any]:
+        """Test connectivity. Returns one sample Merchant vertex with all attributes."""
+        try:
+            result = self._restpp(
+                f"graph/{self.graphname}/vertices/Merchant",
+                params={"limit": 1},
+                timeout=15,
+            )
+            results = result.get("results", []) if isinstance(result, dict) else []
+            sample = results[0] if results else {}
+            attrs = sample.get("attributes", {})
+            return {
+                "ok": True,
+                "vertex_id": sample.get("v_id", "—"),
+                "attribute_keys": list(attrs.keys()),
+                "has_embedding": "embedding" in attrs,
+            }
+        except Exception as exc:
+            return {"ok": False, "error": str(exc)}
 
     def extract_ids(self, matches: list[dict[str, Any]]) -> list[str]:
         ids: list[str] = []
