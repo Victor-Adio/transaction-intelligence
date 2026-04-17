@@ -1,0 +1,64 @@
+# ── Python ──────────────────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.egg
+*.egg-info/
+dist/
+build/
+.eggs/
+*.so
+
+# ── Virtual environments ─────────────────────────────────────────────────────
+.venv/
+venv/
+env/
+ENV/
+
+# ── Credentials & secrets  ──────────────────────────────────────────────────
+# NEVER commit this — it contains your TigerGraph host, username, and API secret
+.streamlit_connection.json
+.env
+*.env
+secrets.toml
+.streamlit/secrets.toml
+
+# ── macOS ────────────────────────────────────────────────────────────────────
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# ── Embedding CSV files — TigerGraph is the source of truth ─────────────────
+# All embeddings are stored as VECTOR attributes in TigerGraph.
+# The app fetches them live when these files are absent.
+# Regenerate locally with: python scripts/generate_*_embeddings.py
+data/transaction_embeddings.csv
+data/merchant_embeddings.csv
+data/user_embeddings.csv
+data/vector_loads/transactions_risk_emb.csv
+data/vector_loads/transactions_behavior_emb.csv
+data/vector_loads/merchant_emb.csv
+data/vector_loads/user_emb.csv
+
+# ── IDE / editor ─────────────────────────────────────────────────────────────
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# ── Jupyter ──────────────────────────────────────────────────────────────────
+.ipynb_checkpoints/
+*.ipynb
+
+# ── Test / diagnostic scripts (keep locally, not needed for deployment) ──────
+scripts/test_raw_auth.py
+scripts/test_tg_connection.py
+
+# ── Presentation and guide documents (keep locally, not in the repo) ─────────
+GRAPHSAGE_CONTROLS_GUIDE.pdf
+Transaction_Intelligence_Presentation.pptx
+DEMO_GUIDE.md
+PRESENTATION_EXAMPLES.md
+VECTOR_DERIVATION_SUMMARY.md
+README_STREAMLIT_DEMO.md

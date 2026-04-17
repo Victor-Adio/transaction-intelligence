@@ -1,0 +1,234 @@
+USE GRAPH Tran_graph
+
+CREATE OR REPLACE QUERY Get_transaction_context(
+  SET<STRING> txn_ids,
+  INT max_txns = 25,
+  INT max_users = 25,
+  INT max_merchants = 25,
+  INT max_locations = 25,
+  INT max_datetimes = 25,
+  INT max_mcc = 25
+) FOR GRAPH Tran_graph SYNTAX v2 {
+  start_txns = SELECT t FROM Transaction:t
+               WHERE t.Transaction_id IN txn_ids
+               LIMIT max_txns;
+
+  related_users = SELECT u
+                  FROM start_txns:t - (Initiate) - User:u
+                  LIMIT max_users;
+
+  related_merchants = SELECT m
+                      FROM start_txns:t - (Occurs) - Merchant:m
+                      LIMIT max_merchants;
+
+  related_locations = SELECT l
+                      FROM related_merchants:m - (Has) - Location:l
+                      LIMIT max_locations;
+
+  related_dt = SELECT dt
+               FROM start_txns:t - (Happens_at) - Transaction_DateTime:dt
+               LIMIT max_datetimes;
+
+  related_mcc = SELECT c
+                FROM related_merchants:m - (Categorized_by) - MCC_Code:c
+                LIMIT max_mcc;
+
+  PRINT start_txns, related_users, related_merchants, related_locations, related_dt, related_mcc;
+  PRINT
+    start_txns.size()        AS txn_count,
+    related_users.size()     AS user_count,
+    related_merchants.size() AS merchant_count,
+    related_locations.size() AS location_count,
+    related_dt.size()        AS datetime_count,
+    related_mcc.size()       AS mcc_count;
+}
+
+CREATE OR REPLACE QUERY Get_merchant_context(
+  SET<STRING> merchant_ids,
+  INT max_merchants = 25,
+  INT max_txns = 100,
+  INT max_users = 100,
+  INT max_locations = 25,
+  INT max_mcc = 25
+) FOR GRAPH Tran_graph SYNTAX v2 {
+  merchants = SELECT m FROM Merchant:m
+              WHERE m.merchantid IN merchant_ids
+              LIMIT max_merchants;
+
+  txns = SELECT t
+         FROM merchants:m - (Occurs) - Transaction:t
+         LIMIT max_txns;
+
+  users = SELECT u
+          FROM txns:t - (Initiate) - User:u
+          LIMIT max_users;
+
+  locations = SELECT l
+              FROM merchants:m - (Has) - Location:l
+              LIMIT max_locations;
+
+  mcc_codes = SELECT c
+              FROM merchants:m - (Categorized_by) - MCC_Code:c
+              LIMIT max_mcc;
+
+  PRINT merchants, txns, users, locations, mcc_codes;
+  PRINT
+    merchants.size() AS merchant_count,
+    txns.size()      AS txn_count,
+    users.size()     AS user_count,
+    locations.size() AS location_count,
+    mcc_codes.size() AS mcc_count;
+}
+
+CREATE OR REPLACE QUERY Get_user_context(
+  SET<STRING> user_ids,
+  INT max_users = 25,
+  INT max_txns = 100,
+  INT max_merchants = 100,
+  INT max_locations = 50,
+  INT max_datetimes = 50,
+  INT max_mcc = 50
+) FOR GRAPH Tran_graph SYNTAX v2 {
+  users = SELECT u FROM User:u
+          WHERE u.userid IN user_ids
+          LIMIT max_users;
+
+  txns = SELECT t
+         FROM users:u - (Initiate) - Transaction:t
+         LIMIT max_txns;
+
+  merchants = SELECT m
+              FROM txns:t - (Occurs) - Merchant:m
+              LIMIT max_merchants;
+
+  locations = SELECT l
+              FROM merchants:m - (Has) - Location:l
+              LIMIT max_locations;
+
+  datetimes = SELECT dt
+              FROM txns:t - (Happens_at) - Transaction_DateTime:dt
+              LIMIT max_datetimes;
+
+  mcc_codes = SELECT c
+              FROM merchants:m - (Categorized_by) - MCC_Code:c
+              LIMIT max_mcc;
+
+  PRINT users, txns, merchants, locations, datetimes, mcc_codes;
+  PRINT
+    users.size()     AS user_count,
+    txns.size()      AS txn_count,
+    merchants.size() AS merchant_count,
+    locations.size() AS location_count,
+    datetimes.size() AS datetime_count,
+    mcc_codes.size() AS mcc_count;
+}
+
+CREATE OR REPLACE QUERY Summarize_transaction_patterns(
+  SET<STRING> txn_ids
+) FOR GRAPH Tran_graph SYNTAX v2 {
+  SumAccum<INT> @@txn_count;
+  SumAccum<INT> @@merchant_count;
+  SumAccum<INT> @@region_count;
+  MapAccum<STRING, INT> @@country_hist;
+
+  txns = SELECT t FROM Transaction:t
+         WHERE t.Transaction_id IN txn_ids
+         POST-ACCUM @@txn_count += 1;
+
+  merchants = SELECT m FROM txns:t - (Occurs) - Merchant:m
+              POST-ACCUM @@merchant_count += 1;
+
+  locations = SELECT l FROM merchants:m - (Has) - Location:l
+              POST-ACCUM
+                @@region_count += 1,
+                @@country_hist += (l.country -> 1);
+
+  mcc_codes = SELECT c FROM merchants:m - (Categorized_by) - MCC_Code:c;
+
+  PRINT txns, merchants, locations, mcc_codes,
+        @@txn_count      AS txn_count,
+        @@merchant_count AS merchant_count,
+        @@region_count   AS region_count,
+        @@country_hist   AS country_histogram;
+}
+
+CREATE OR REPLACE QUERY Summarize_merchant_exposure(
+  SET<STRING> merchant_ids
+) FOR GRAPH Tran_graph SYNTAX v2 {
+  SumAccum<INT>         @@txn_count;
+  SumAccum<INT>         @@user_count;
+  MapAccum<STRING, INT> @@region_hist;
+  MapAccum<STRING, INT> @@country_hist;
+  MapAccum<STRING, INT> @@mcc_hist;
+  MapAccum<STRING, INT> @@channel_hist;
+
+  merchants = SELECT m FROM Merchant:m
+              WHERE m.merchantid IN merchant_ids;
+
+  txns = SELECT t FROM merchants:m - (Occurs) - Transaction:t
+         POST-ACCUM
+           @@txn_count   += 1,
+           @@channel_hist += (t.Channel_type -> 1);
+
+  locations = SELECT l FROM merchants:m - (Has) - Location:l
+              POST-ACCUM
+                @@region_hist  += (l.merch_region_code -> 1),
+                @@country_hist += (l.country -> 1);
+
+  mcc_codes = SELECT c FROM merchants:m - (Categorized_by) - MCC_Code:c
+              POST-ACCUM @@mcc_hist += (c.mcc_code -> 1);
+
+  users = SELECT u FROM txns:t - (Initiate) - User:u
+          POST-ACCUM @@user_count += 1;
+
+  PRINT merchants, txns, users,
+        @@txn_count    AS txn_count,
+        @@user_count   AS user_count,
+        @@region_hist  AS region_histogram,
+        @@country_hist AS country_histogram,
+        @@mcc_hist     AS mcc_histogram,
+        @@channel_hist AS channel_histogram;
+}
+
+CREATE OR REPLACE QUERY Summarize_user_behavior(
+  SET<STRING> user_ids
+) FOR GRAPH Tran_graph SYNTAX v2 {
+  SumAccum<INT>         @@txn_count;
+  SumAccum<INT>         @@merchant_count;
+  MapAccum<STRING, INT> @@channel_hist;
+  MapAccum<STRING, INT> @@region_hist;
+  MapAccum<STRING, INT> @@country_hist;
+  MapAccum<STRING, INT> @@mcc_hist;
+  MapAccum<STRING, INT> @@time_hist;
+
+  users = SELECT u FROM User:u
+          WHERE u.userid IN user_ids;
+
+  txns = SELECT t FROM users:u - (Initiate) - Transaction:t
+         POST-ACCUM
+           @@txn_count   += 1,
+           @@channel_hist += (t.Channel_type -> 1);
+
+  merchants = SELECT m FROM txns:t - (Occurs) - Merchant:m
+              POST-ACCUM @@merchant_count += 1;
+
+  locations = SELECT l FROM merchants:m - (Has) - Location:l
+              POST-ACCUM
+                @@region_hist  += (l.merch_region_code -> 1),
+                @@country_hist += (l.country -> 1);
+
+  mcc_codes = SELECT c FROM merchants:m - (Categorized_by) - MCC_Code:c
+              POST-ACCUM @@mcc_hist += (c.mcc_code -> 1);
+
+  datetimes = SELECT dt FROM txns:t - (Happens_at) - Transaction_DateTime:dt
+              POST-ACCUM @@time_hist += (dt.TransactionTime -> 1);
+
+  PRINT users, txns,
+        @@txn_count      AS txn_count,
+        @@merchant_count AS merchant_count,
+        @@channel_hist   AS channel_histogram,
+        @@region_hist    AS region_histogram,
+        @@country_hist   AS country_histogram,
+        @@mcc_hist       AS mcc_histogram,
+        @@time_hist      AS time_histogram;
+}

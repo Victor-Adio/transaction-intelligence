@@ -1,0 +1,21 @@
+location_id,merchant_city,merchant_country_code,merchant_country,merchant_region_code
+LOC_ES_MADRID,Madrid,ES,Spain,EMEA
+LOC_SG_SINGAPORE,Singapore,SG,Singapore,APAC
+LOC_JP_OSAKA,Osaka,JP,Japan,APAC
+LOC_FR_PARIS,Paris,FR,France,EMEA
+LOC_US_SAN_FRANCISCO,San Francisco,US,United States,NA
+LOC_GB_LONDON,London,GB,United Kingdom,EMEA
+LOC_CA_TORONTO,Toronto,CA,Canada,NA
+LOC_GB_MANCHESTER,Manchester,GB,United Kingdom,EMEA
+LOC_US_NEW_YORK,New York,US,United States,NA
+LOC_IN_BENGALURU,Bengaluru,IN,India,APAC
+LOC_DE_BERLIN,Berlin,DE,Germany,EMEA
+LOC_CA_VANCOUVER,Vancouver,CA,Canada,NA
+LOC_HK_HONG_KONG,Hong Kong,HK,Hong Kong,APAC
+LOC_AE_DUBAI,Dubai,AE,United Arab Emirates,MEA
+LOC_JP_TOKYO,Tokyo,JP,Japan,APAC
+LOC_AU_MELBOURNE,Melbourne,AU,Australia,APAC
+LOC_IN_MUMBAI,Mumbai,IN,India,APAC
+LOC_NL_AMSTERDAM,Amsterdam,NL,Netherlands,EMEA
+LOC_US_CHICAGO,Chicago,US,United States,NA
+LOC_AU_SYDNEY,Sydney,AU,Australia,APAC
