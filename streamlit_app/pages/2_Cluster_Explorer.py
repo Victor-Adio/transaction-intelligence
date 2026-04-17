@@ -91,21 +91,27 @@ with st.expander("🔌 TigerGraph connection status", expanded=tg_client is None
             "and make sure `[tigergraph]` section is filled in with `host`, `graph_name`, `username`, `secret`, `use_ssl`."
         )
     else:
-        ping = tg_client.ping()
-        if ping["ok"]:
-            st.success(f"Connected to `{tg_client.host}` / graph `{tg_client.graphname}`")
-            st.markdown(f"- Sample vertex ID: `{ping['vertex_id']}`")
-            st.markdown(f"- Attributes returned: `{ping['attribute_keys']}`")
-            if ping["has_embedding"]:
-                st.success("✅ `embedding` vector attribute is visible — embeddings will be fetched from TigerGraph.")
+        try:
+            ping = tg_client.ping()
+            if ping["ok"]:
+                st.success(f"Connected to `{tg_client.host}` / graph `{tg_client.graphname}`")
+                st.markdown(f"- Sample vertex ID: `{ping['vertex_id']}`")
+                st.markdown(f"- Attributes returned: `{ping['attribute_keys']}`")
+                if ping["has_embedding"]:
+                    st.success("✅ `embedding` vector attribute is visible — embeddings will be fetched from TigerGraph.")
+                else:
+                    st.warning(
+                        "⚠️ `embedding` attribute **not returned** by the REST++ vertex endpoint. "
+                        "TigerGraph may not expose VECTOR attributes via `/restpp/graph/.../vertices`. "
+                        "You may need to run the embedding generation scripts locally."
+                    )
             else:
-                st.warning(
-                    "⚠️ `embedding` attribute **not returned** by the REST++ vertex endpoint. "
-                    "TigerGraph may not expose VECTOR attributes via `/restpp/graph/.../vertices`. "
-                    "You may need to run the embedding generation scripts locally."
-                )
-        else:
-            st.error(f"Connection failed: `{ping['error']}`")
+                st.error(f"Connection failed: `{ping['error']}`")
+        except AttributeError:
+            st.success(f"Connected to `{tg_client.host}` / graph `{tg_client.graphname}`")
+            st.info("Diagnostics not available on this deployment — reboot the app to get the latest version.")
+        except Exception as exc:
+            st.error(f"Ping error: `{exc}`")
 
 # ── Render ──────────────────────────────────────────────────────────────────
 with st.spinner("Computing UMAP projection… first run ~20 seconds"):
