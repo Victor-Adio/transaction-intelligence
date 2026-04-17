@@ -78,41 +78,21 @@ def _get_tg_client():
 tg_client = _get_tg_client()
 
 # ── Connection diagnostics ───────────────────────────────────────────────────
-with st.expander("🔌 TigerGraph connection status", expanded=tg_client is None):
+with st.expander("🔌 TigerGraph connection status", expanded=False):
     if tg_client is None:
         from services.connection import load_saved_connection
         cfg = load_saved_connection()
-        st.error("**TigerGraph client could not be built.**")
-        st.markdown(f"- Host detected: `{cfg.get('host', 'not found')}`")
-        st.markdown(f"- Graph: `{cfg.get('graph_name', 'not found')}`")
-        st.markdown(f"- Secret present: `{'yes' if cfg.get('password') else 'NO — this is the problem'}`")
-        st.markdown(
-            "**Fix:** Go to Streamlit Cloud → your app → ⋮ → Settings → Secrets "
-            "and make sure `[tigergraph]` section is filled in with `host`, `graph_name`, `username`, `secret`, `use_ssl`."
-        )
+        st.warning("TigerGraph client not connected (used only for Hybrid Search on this page).")
+        st.markdown(f"- Host: `{cfg.get('host', 'not found')}`")
+        st.markdown(f"- Secret present: `{'yes' if cfg.get('password') else 'NO'}`")
     else:
-        try:
-            ping = tg_client.ping()
-            if ping["ok"]:
-                st.success(f"Connected · `{tg_client.host}` / `{tg_client.graphname}`")
-                st.markdown(f"- Vertex endpoint attributes: `{ping['attribute_keys']}`")
-                st.markdown(f"- VECTOR via vertex endpoint: `{'✅' if ping['has_embedding'] else '❌ (expected — REST++ strips VECTOR attributes)'}`")
-                if ping.get("export_query_installed"):
-                    if ping.get("export_has_embedding"):
-                        st.success("✅ Export query installed and returning `embedding` — embeddings will load from TigerGraph.")
-                    else:
-                        st.warning(f"⚠️ Export query installed but `embedding` not in response. Keys: `{ping.get('export_attr_keys')}`")
-                else:
-                    st.error(
-                        "❌ `Export_merchant_embeddings` query not installed on TigerGraph. "
-                        "Run `python scripts/install_queries.py` locally to install it."
-                    )
-            else:
-                st.error(f"Connection failed: `{ping['error']}`")
-        except AttributeError:
-            st.info("Diagnostics updating — please reboot the app.")
-        except Exception as exc:
-            st.error(f"Ping error: `{exc}`")
+        st.success(f"Connected · `{tg_client.host}` / `{tg_client.graphname}`")
+        st.info(
+            "**Note:** TigerGraph stores VECTOR attributes as an internal HNSW index — "
+            "they are not returned via REST++ responses by design. "
+            "Cluster visualisations use pre-computed embedding CSVs. "
+            "The **Hybrid Search** page is where TigerGraph's native vector search runs live."
+        )
 
 # ── Render ──────────────────────────────────────────────────────────────────
 with st.spinner("Computing UMAP projection… first run ~20 seconds"):

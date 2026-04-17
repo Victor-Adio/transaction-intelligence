@@ -30,9 +30,10 @@ secrets.toml
 .LSOverride
 
 # ── Embedding CSV files ───────────────────────────────────────────────────────
-# transaction_embeddings.csv is 78 MB — above GitHub's recommended limit.
-# merchant_embeddings.csv (1.7 MB) and user_embeddings.csv (6.6 MB) ARE committed
-# because TigerGraph's REST++ vertex endpoint does not return VECTOR attributes.
+# merchant_embeddings.csv (1.7 MB) and user_embeddings.csv (6.6 MB) are committed.
+# transaction_embeddings.csv is 78 MB — excluded (GitHub 50 MB limit).
+# TigerGraph stores VECTOR attributes as an internal HNSW index; they are not
+# serializable via REST++ — Cluster/GraphSAGE pages use these CSVs for UMAP.
 data/transaction_embeddings.csv
 data/vector_loads/transactions_risk_emb.csv
 data/vector_loads/transactions_behavior_emb.csv
