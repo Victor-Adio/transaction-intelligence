@@ -63,10 +63,14 @@ def load_all_embeddings(tg_client=None) -> tuple[
     user_csv     = ROOT / "data" / "user_embeddings.csv"
 
     # ── Transaction embeddings (risk + behaviour) ──────────────────────────
-    if txn_risk_csv.exists():
-        txn_risk = load_embedding_dict(txn_risk_csv, "tran_sequence_number",
+    # Full file (78 MB, local only) → slim sample (16 MB, committed to git) → TigerGraph
+    txn_slim_csv = ROOT / "data" / "transaction_embeddings_slim.csv"
+    txn_source   = txn_risk_csv if txn_risk_csv.exists() else (txn_slim_csv if txn_slim_csv.exists() else None)
+
+    if txn_source is not None:
+        txn_risk = load_embedding_dict(txn_source, "tran_sequence_number",
                                        "transaction_text_risk")
-        txn_beh  = load_embedding_dict(txn_risk_csv, "tran_sequence_number",
+        txn_beh  = load_embedding_dict(txn_source, "tran_sequence_number",
                                        "transaction_text_behavior")
     elif tg_client is not None:
         from services.tg_embedding_loader import fetch_embeddings_from_tg
@@ -335,6 +339,36 @@ def compute_sage_merchant_2hop(
         user_vecs   = [sage_users[uid] for uid in user_ids if uid in sage_users]
         result[mid] = _mean_aggregate(own_emb, user_vecs, alpha)
     return result
+
+
+# ── 2-hop UMAP builder (module-level so Streamlit cache hashes it stably) ──
+
+def build_2hop_umap(
+    merch_embs:   dict[str, np.ndarray],
+    user_embs:    dict[str, np.ndarray],
+    txn_embs:     dict[str, np.ndarray],
+    merch_to_txn: dict[str, list[str]],
+    txn_to_user:  dict[str, list[str]],
+    user_to_txn:  dict[str, list[str]],
+    alpha:        float,
+    n_neighbors:  int,
+    min_dist:     float,
+) -> tuple[list[str], np.ndarray, np.ndarray, np.ndarray,
+           dict[str, np.ndarray], dict[str, np.ndarray]]:
+    """Compute 1-hop and 2-hop SAGE embeddings and UMAP for all three views."""
+    from umap import UMAP
+    sage_1h = compute_sage_merchant_embeddings(merch_embs, txn_embs, merch_to_txn, alpha=alpha)
+    sage_2h = compute_sage_merchant_2hop(merch_embs, user_embs, txn_embs,
+                                          merch_to_txn, txn_to_user, user_to_txn, alpha=alpha)
+    ids    = sorted(merch_embs.keys())
+    mat_o  = np.array([merch_embs[i] for i in ids], dtype=np.float32)
+    mat_1  = np.array([sage_1h[i]    for i in ids], dtype=np.float32)
+    mat_2  = np.array([sage_2h[i]    for i in ids], dtype=np.float32)
+    coords = UMAP(n_components=2, n_neighbors=n_neighbors, min_dist=min_dist,
+                  random_state=42, low_memory=True).fit_transform(
+                  np.vstack([mat_o, mat_1, mat_2]))
+    n = len(ids)
+    return ids, coords[:n], coords[n:2*n], coords[2*n:], sage_1h, sage_2h
 
 
 # ── Supervised fraud scoring ───────────────────────────────────────────────

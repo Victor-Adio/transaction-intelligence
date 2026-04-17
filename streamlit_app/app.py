@@ -11,12 +11,7 @@ import streamlit as st
 from services.embeddings import QueryEmbedder
 from services.tigergraph_client import TigerGraphDemoClient
 from services.connection import load_saved_connection, get_tg_client
-from services.cluster_viz import (
-    transaction_cluster_figure,
-    merchant_cluster_figure,
-    user_cluster_figure,
-    graph_network_figure,
-)
+from services.cluster_viz import graph_network_figure
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -683,62 +678,6 @@ def main() -> None:
             with st.expander("Query Vector (first 32 dims)"):
                 st.code(json.dumps(query_vector[:32], indent=2), language="json")
                 st.caption(f"Full dimension: {len(query_vector)}")
-
-
-def cluster_explorer_page() -> None:
-    """Standalone page: 2-D UMAP cluster visualisations of all embeddings."""
-    st.set_page_config(page_title="Cluster Explorer | TigerGraph", page_icon="🔬", layout="wide")
-    st.markdown("## 🔬 Embedding Cluster Explorer")
-    st.caption(
-        "2-D UMAP projections of the 384-dimensional embeddings. "
-        "Nearby points are semantically similar. Clusters reveal natural groupings "
-        "in the transaction network — no labels required."
-    )
-
-    entity = st.radio(
-        "Entity to explore",
-        ["Transactions (Risk)", "Transactions (Behaviour)", "Merchants", "Users"],
-        horizontal=True,
-    )
-
-    with st.expander("⚙️ UMAP Settings", expanded=False):
-        c1, c2, c3 = st.columns(3)
-        n_neighbors = c1.slider("n_neighbors", 5, 50, 15,
-                                 help="Higher = more global structure preserved")
-        min_dist    = c2.slider("min_dist", 0.01, 0.5, 0.1, step=0.01,
-                                 help="Lower = tighter clusters")
-        sample_n    = c3.slider("Sample size (transactions)", 200, 5000, 2000, step=200,
-                                 help="Smaller = faster rendering")
-
-    with st.spinner("Computing UMAP projection… (first run takes ~20 seconds)"):
-        try:
-            if entity == "Transactions (Risk)":
-                fig = transaction_cluster_figure("transaction_text_risk", n_neighbors, min_dist, sample_n)
-            elif entity == "Transactions (Behaviour)":
-                fig = transaction_cluster_figure("transaction_text_behavior", n_neighbors, min_dist, sample_n)
-            elif entity == "Merchants":
-                fig = merchant_cluster_figure(n_neighbors, min_dist)
-            else:
-                fig = user_cluster_figure(n_neighbors, min_dist)
-            st.plotly_chart(fig, use_container_width=True)
-        except FileNotFoundError as e:
-            st.error(f"Embedding file not found: {e}\nRun the embedding generation scripts first.")
-        except Exception as e:
-            st.error(f"Error generating cluster plot: {e}")
-
-    st.markdown("---")
-    st.markdown(
-        """
-        **How to read this chart:**
-        - Each **dot** is one transaction / merchant / user
-        - **Distance** between dots reflects semantic similarity — close dots have similar profiles
-        - **Clusters** are natural groupings the model discovered with no fraud labels
-        - **Colour** encodes amount band / MCC category / region (depending on entity)
-        - Hover a dot to see its ID and attributes
-        - Use this to **explain to management** why vector search finds semantically related entities
-          even without exact attribute matches
-        """
-    )
 
 
 # ── Landing page ───────────────────────────────────────────────────────────

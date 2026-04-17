@@ -98,18 +98,21 @@ def transaction_cluster_figure(
     extra_points: Optional[pd.DataFrame] = None,
     tg_client=None,
 ) -> go.Figure:
-    csv = ROOT / "data" / "transaction_embeddings.csv"
+    # Full (78 MB, local only) → slim sample (16 MB, committed to git) → TigerGraph
+    csv_full = ROOT / "data" / "transaction_embeddings.csv"
+    csv_slim = ROOT / "data" / "transaction_embeddings_slim.csv"
     vector_attr = "risk_embedding" if "risk" in text_col else "behaviour_emb"
 
-    if csv.exists():
-        df = load_embeddings(csv, "tran_sequence_number", text_col_filter=text_col)
+    if csv_full.exists():
+        df = load_embeddings(csv_full, "tran_sequence_number", text_col_filter=text_col)
+    elif csv_slim.exists():
+        df = load_embeddings(csv_slim, "tran_sequence_number", text_col_filter=text_col)
     else:
         tg_df = _embeddings_from_tg_as_df(tg_client, "Transaction", vector_attr, "tran_sequence_number")
         if tg_df is None:
             raise FileNotFoundError(
-                f"{csv}\n\nTransaction embedding CSV not found and no TigerGraph client provided. "
-                "Either run `python scripts/generate_transaction_embeddings.py` locally, "
-                "or pass a connected TigerGraphDemoClient to this function."
+                "Transaction embedding CSV not found. "
+                "Commit `data/transaction_embeddings_slim.csv` to the repository to enable this view."
             )
         df = tg_df
     if len(df) > sample_n:
