@@ -29,13 +29,11 @@ secrets.toml
 .AppleDouble
 .LSOverride
 
-# ── Embedding CSV files — TigerGraph is the source of truth ─────────────────
-# All embeddings are stored as VECTOR attributes in TigerGraph.
-# The app fetches them live when these files are absent.
-# Regenerate locally with: python scripts/generate_*_embeddings.py
+# ── Embedding CSV files ───────────────────────────────────────────────────────
+# transaction_embeddings.csv is 78 MB — above GitHub's recommended limit.
+# merchant_embeddings.csv (1.7 MB) and user_embeddings.csv (6.6 MB) ARE committed
+# because TigerGraph's REST++ vertex endpoint does not return VECTOR attributes.
 data/transaction_embeddings.csv
-data/merchant_embeddings.csv
-data/user_embeddings.csv
 data/vector_loads/transactions_risk_emb.csv
 data/vector_loads/transactions_behavior_emb.csv
 data/vector_loads/merchant_emb.csv

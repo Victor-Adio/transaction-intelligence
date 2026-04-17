@@ -108,8 +108,9 @@ class TigerGraphDemoClient:
         return result.get("results", []) if isinstance(result, dict) else []
 
     def ping(self) -> dict[str, Any]:
-        """Test connectivity. Returns one sample Merchant vertex with all attributes."""
+        """Test connectivity using the Export_merchant_embeddings installed query."""
         try:
+            # First confirm basic connectivity via the vertex endpoint
             result = self._restpp(
                 f"graph/{self.graphname}/vertices/Merchant",
                 params={"limit": 1},
@@ -118,11 +119,37 @@ class TigerGraphDemoClient:
             results = result.get("results", []) if isinstance(result, dict) else []
             sample = results[0] if results else {}
             attrs = sample.get("attributes", {})
+
+            # Now test the export query (which DOES return VECTOR attributes)
+            export_result = self._restpp(
+                f"query/{self.graphname}/Export_merchant_embeddings",
+                params=[],
+                timeout=30,
+                _allow_missing=True,
+            )
+            export_results = export_result.get("results", []) if isinstance(export_result, dict) else []
+            export_missing = export_result.get("_missing", False)
+
+            export_vertices: list = []
+            for block in export_results:
+                if isinstance(block, dict):
+                    for v in block.values():
+                        if isinstance(v, list) and v:
+                            export_vertices = v
+                            break
+                if export_vertices:
+                    break
+
+            export_attrs = export_vertices[0].get("attributes", {}) if export_vertices else {}
+
             return {
                 "ok": True,
                 "vertex_id": sample.get("v_id", "—"),
                 "attribute_keys": list(attrs.keys()),
                 "has_embedding": "embedding" in attrs,
+                "export_query_installed": not export_missing,
+                "export_has_embedding": "embedding" in export_attrs,
+                "export_attr_keys": list(export_attrs.keys()),
             }
         except Exception as exc:
             return {"ok": False, "error": str(exc)}

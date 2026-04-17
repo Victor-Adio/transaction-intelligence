@@ -1,22 +1,18 @@
 """
 TigerGraph embedding loader.
 
-Fetches pre-computed vector embeddings directly from TigerGraph vertex
-attributes via the REST++ /graph/{name}/vertices endpoint.
+Fetches pre-computed vector embeddings directly from TigerGraph by calling
+installed GSQL queries (Export_merchant_embeddings, Export_user_embeddings,
+Export_transaction_embeddings).
 
-This replaces reading from local CSV files — all embeddings live in TigerGraph
-and do not need to be committed to the repository.
+The standard REST++ vertex endpoint does NOT return VECTOR attributes —
+installed GSQL queries that PRINT vertex sets DO return them.
 
 Usage
 -----
     from services.tg_embedding_loader import fetch_embeddings_from_tg
 
-    merch_embs = fetch_embeddings_from_tg(
-        client,
-        vertex_type    = "Merchant",
-        vector_attr    = "embedding",
-        id_attr        = "v_id",       # use the vertex primary ID
-    )
+    merch_embs = fetch_embeddings_from_tg(client, "Merchant", "embedding")
     # returns {merchant_id: np.ndarray(384,)}
 """
 from __future__ import annotations
@@ -25,62 +21,94 @@ import logging
 from typing import Optional
 
 import numpy as np
-import requests
 
 log = logging.getLogger(__name__)
 
-# Vertex type → (vector attribute name, primary-id attribute or "v_id")
-# Update these if attribute names differ in your graph.
-VERTEX_VECTOR_MAP: dict[str, tuple[str, str]] = {
-    "Transaction": ("risk_embedding",  "v_id"),   # primary source for risk
-    "Transaction_behaviour": ("behaviour_emb", "v_id"),   # alias used internally
-    "Merchant":    ("embedding",       "v_id"),
-    "User":        ("embedding",       "v_id"),
+# Maps vertex_type → installed export query name
+_EXPORT_QUERY_MAP = {
+    "Merchant":    "Export_merchant_embeddings",
+    "User":        "Export_user_embeddings",
+    "Transaction": "Export_transaction_embeddings",
+}
+
+# Maps vertex_type → result key in the query response
+_RESULT_KEY_MAP = {
+    "Merchant":    "merchants",
+    "User":        "users",
+    "Transaction": "txns",
 }
 
 
 def fetch_embeddings_from_tg(
-    client,                         # TigerGraphDemoClient instance
+    client,
     vertex_type: str,
     vector_attr: str,
     limit: int = 10_000,
 ) -> dict[str, np.ndarray]:
-    """Return {vertex_id: embedding_array} fetched live from TigerGraph.
-
-    Uses the REST++ vertex endpoint:
-        GET /restpp/graph/{graph}/vertices/{type}?limit={n}
+    """Return {vertex_id: embedding_array} by calling an installed GSQL export query.
 
     Parameters
     ----------
     client      : TigerGraphDemoClient — already authenticated
-    vertex_type : e.g. "Merchant", "User", "Transaction"
-    vector_attr : name of the VECTOR attribute on that vertex type
-    limit       : maximum number of vertices to fetch (default 10,000)
+    vertex_type : "Merchant", "User", or "Transaction"
+    vector_attr : name of the VECTOR attribute (e.g. "embedding", "risk_embedding")
+    limit       : max vertices to fetch (only used for Transaction)
     """
-    path   = f"graph/{client.graphname}/vertices/{vertex_type}"
-    params = {"limit": limit}
+    query_name = _EXPORT_QUERY_MAP.get(vertex_type)
+    result_key = _RESULT_KEY_MAP.get(vertex_type)
 
-    try:
-        resp = client._restpp(path, params=params)
-    except Exception as exc:
-        log.error("Failed to fetch %s embeddings from TigerGraph: %s", vertex_type, exc)
+    if not query_name:
+        log.error("No export query defined for vertex type: %s", vertex_type)
         return {}
 
-    results = resp.get("results", []) if isinstance(resp, dict) else resp
-    if not isinstance(results, list):
+    params: list[tuple[str, str]] = []
+    if vertex_type == "Transaction":
+        params = [("batch_size", str(limit))]
+
+    try:
+        resp = client._restpp(
+            f"query/{client.graphname}/{query_name}",
+            params=params,
+            timeout=120,
+        )
+    except Exception as exc:
+        log.error("Failed to call %s: %s", query_name, exc)
+        return {}
+
+    results = resp.get("results", []) if isinstance(resp, dict) else []
+
+    # Find the list of vertices in the results
+    vertices: list[dict] = []
+    for block in results:
+        if isinstance(block, dict):
+            # Direct key match
+            if result_key and result_key in block:
+                vertices = block[result_key]
+                break
+            # Fallback: take first list value
+            for v in block.values():
+                if isinstance(v, list) and v:
+                    vertices = v
+                    break
+        if vertices:
+            break
+
+    if not vertices:
+        log.warning("%s returned 0 vertices. Query may not be installed — run scripts/install_queries.py", query_name)
         return {}
 
     out: dict[str, np.ndarray] = {}
-    for vertex in results:
+    missing_vec = 0
+    for vertex in vertices:
         vid   = str(vertex.get("v_id", ""))
         attrs = vertex.get("attributes", {})
         raw   = attrs.get(vector_attr)
 
         if raw is None:
+            missing_vec += 1
             continue
 
-        # TigerGraph returns vectors as a list of floats or as a JSON string
-        if isinstance(raw, list):
+        if isinstance(raw, list) and len(raw) > 0:
             vec = np.array(raw, dtype=np.float32)
         elif isinstance(raw, str) and raw.strip().startswith("["):
             try:
@@ -89,10 +117,18 @@ def fetch_embeddings_from_tg(
             except Exception:
                 continue
         else:
+            missing_vec += 1
             continue
 
         if vec.ndim == 1 and len(vec) > 0:
             out[vid] = vec
 
-    log.info("Fetched %d %s embeddings from TigerGraph", len(out), vertex_type)
+    if missing_vec:
+        log.warning(
+            "%d/%d %s vertices had no '%s' attribute in the response. "
+            "Ensure the VECTOR attribute is populated on TigerGraph.",
+            missing_vec, len(vertices), vertex_type, vector_attr,
+        )
+
+    log.info("Fetched %d %s embeddings (%s) from TigerGraph", len(out), vertex_type, vector_attr)
     return out

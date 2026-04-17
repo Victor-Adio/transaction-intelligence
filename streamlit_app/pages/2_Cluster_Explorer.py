@@ -94,22 +94,23 @@ with st.expander("🔌 TigerGraph connection status", expanded=tg_client is None
         try:
             ping = tg_client.ping()
             if ping["ok"]:
-                st.success(f"Connected to `{tg_client.host}` / graph `{tg_client.graphname}`")
-                st.markdown(f"- Sample vertex ID: `{ping['vertex_id']}`")
-                st.markdown(f"- Attributes returned: `{ping['attribute_keys']}`")
-                if ping["has_embedding"]:
-                    st.success("✅ `embedding` vector attribute is visible — embeddings will be fetched from TigerGraph.")
+                st.success(f"Connected · `{tg_client.host}` / `{tg_client.graphname}`")
+                st.markdown(f"- Vertex endpoint attributes: `{ping['attribute_keys']}`")
+                st.markdown(f"- VECTOR via vertex endpoint: `{'✅' if ping['has_embedding'] else '❌ (expected — REST++ strips VECTOR attributes)'}`")
+                if ping.get("export_query_installed"):
+                    if ping.get("export_has_embedding"):
+                        st.success("✅ Export query installed and returning `embedding` — embeddings will load from TigerGraph.")
+                    else:
+                        st.warning(f"⚠️ Export query installed but `embedding` not in response. Keys: `{ping.get('export_attr_keys')}`")
                 else:
-                    st.warning(
-                        "⚠️ `embedding` attribute **not returned** by the REST++ vertex endpoint. "
-                        "TigerGraph may not expose VECTOR attributes via `/restpp/graph/.../vertices`. "
-                        "You may need to run the embedding generation scripts locally."
+                    st.error(
+                        "❌ `Export_merchant_embeddings` query not installed on TigerGraph. "
+                        "Run `python scripts/install_queries.py` locally to install it."
                     )
             else:
                 st.error(f"Connection failed: `{ping['error']}`")
         except AttributeError:
-            st.success(f"Connected to `{tg_client.host}` / graph `{tg_client.graphname}`")
-            st.info("Diagnostics not available on this deployment — reboot the app to get the latest version.")
+            st.info("Diagnostics updating — please reboot the app.")
         except Exception as exc:
             st.error(f"Ping error: `{exc}`")
 
