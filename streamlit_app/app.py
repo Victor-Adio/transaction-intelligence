@@ -264,7 +264,7 @@ def extract_locations(results: list[dict]) -> pd.DataFrame:
                 _add(
                     str(a.get("merch_city", "")),
                     str(a.get("merch_region_code", "")),
-                    str(a.get("country", "") or a.get("merchant_country_code", "")),
+                    str(a.get("merchant_country", "") or a.get("merchant_country_code", "")),
                     str(a.get("latitude",  "")),
                     str(a.get("longitude", "")),
                 )

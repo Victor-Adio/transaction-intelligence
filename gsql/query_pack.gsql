@@ -141,7 +141,7 @@ CREATE OR REPLACE QUERY Summarize_transaction_patterns(
   locations = SELECT l FROM merchants:m - (Has) - Location:l
               POST-ACCUM
                 @@region_count += 1,
-                @@country_hist += (l.country -> 1);
+                @@country_hist += (l.merchant_country -> 1);
 
   mcc_codes = SELECT c FROM merchants:m - (Categorized_by) - MCC_Code:c;
 
@@ -173,7 +173,7 @@ CREATE OR REPLACE QUERY Summarize_merchant_exposure(
   locations = SELECT l FROM merchants:m - (Has) - Location:l
               POST-ACCUM
                 @@region_hist  += (l.merch_region_code -> 1),
-                @@country_hist += (l.country -> 1);
+                @@country_hist += (l.merchant_country -> 1);
 
   mcc_codes = SELECT c FROM merchants:m - (Categorized_by) - MCC_Code:c
               POST-ACCUM @@mcc_hist += (c.mcc_code -> 1);
@@ -215,7 +215,7 @@ CREATE OR REPLACE QUERY Summarize_user_behavior(
   locations = SELECT l FROM merchants:m - (Has) - Location:l
               POST-ACCUM
                 @@region_hist  += (l.merch_region_code -> 1),
-                @@country_hist += (l.country -> 1);
+                @@country_hist += (l.merchant_country -> 1);
 
   mcc_codes = SELECT c FROM merchants:m - (Categorized_by) - MCC_Code:c
               POST-ACCUM @@mcc_hist += (c.mcc_code -> 1);
