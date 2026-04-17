@@ -70,6 +70,18 @@ with col_exp:
 
 st.markdown("---")
 
+# ── File availability check ──────────────────────────────────────────────────
+_DATA_ROOT = Path(__file__).resolve().parents[2] / "data"
+_merch_csv = _DATA_ROOT / "merchant_embeddings.csv"
+_user_csv  = _DATA_ROOT / "user_embeddings.csv"
+_txn_csv   = _DATA_ROOT / "transaction_embeddings.csv"
+
+with st.expander("📁 Data file status", expanded=not (_merch_csv.exists() and _user_csv.exists())):
+    st.markdown(f"- `merchant_embeddings.csv` → {'✅ found' if _merch_csv.exists() else '❌ missing'}")
+    st.markdown(f"- `user_embeddings.csv`     → {'✅ found' if _user_csv.exists() else '❌ missing'}")
+    st.markdown(f"- `transaction_embeddings.csv` → {'✅ found' if _txn_csv.exists() else '⚠️ missing (transaction cluster unavailable)'}")
+    st.caption(f"Data root: `{_DATA_ROOT}`")
+
 # ── Build TigerGraph client (used as fallback when CSVs are absent) ─────────
 @st.cache_resource(show_spinner=False)
 def _get_tg_client():
