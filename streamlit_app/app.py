@@ -10,6 +10,7 @@ import streamlit as st
 
 from services.embeddings import QueryEmbedder
 from services.tigergraph_client import TigerGraphDemoClient
+from services.connection import load_saved_connection, get_tg_client
 from services.cluster_viz import (
     transaction_cluster_figure,
     merchant_cluster_figure,
@@ -113,39 +114,7 @@ SEARCH_MODES = {
 }
 
 
-# ── Connection helpers ─────────────────────────────────────────────────────
-
-def load_saved_connection() -> dict[str, object]:
-    # 1. Local JSON file (saved by the sidebar "Save" button — ignored by git)
-    if CONNECTION_STATE_FILE.exists():
-        try:
-            return json.loads(CONNECTION_STATE_FILE.read_text(encoding="utf-8"))
-        except Exception:
-            pass
-
-    # 2. Streamlit Cloud secrets  (set in App Settings → Secrets on share.streamlit.io)
-    #    Structure expected:
-    #      [tigergraph]
-    #      host = "https://..."
-    #      graph_name = "Tran_graph"
-    #      username = "you@email.com"
-    #      secret = "your_api_secret"
-    #      use_ssl = true
-    try:
-        tg = st.secrets.get("tigergraph", {})
-        if tg:
-            return {
-                "host":          str(tg.get("host",       "")),
-                "graph_name":    str(tg.get("graph_name", "Tran_graph")),
-                "username":      str(tg.get("username",   "")),
-                "use_ssl":       bool(tg.get("use_ssl",   True)),
-                "save_password": False,
-                "password":      str(tg.get("secret",     "")),
-            }
-    except Exception:
-        pass
-
-    return {}
+# ── Connection helpers (load_saved_connection imported from services.connection) ─
 
 
 def save_connection(payload: dict[str, object]) -> None:

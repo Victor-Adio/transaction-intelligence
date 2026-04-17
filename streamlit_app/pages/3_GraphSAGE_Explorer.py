@@ -84,18 +84,8 @@ st.sidebar.markdown(
 # ── TigerGraph client (fallback when CSVs absent) ──────────────────────────
 @st.cache_resource(show_spinner=False)
 def _get_tg_client():
-    from app import load_saved_connection, TigerGraphDemoClient
-    cfg = load_saved_connection()
-    if not cfg.get("password") or not cfg.get("host"):
-        return None
-    try:
-        return TigerGraphDemoClient(
-            host=cfg["host"], graph_name=cfg.get("graph_name", "Tran_graph"),
-            username=cfg.get("username", ""), password=cfg["password"],
-            use_ssl=bool(cfg.get("use_ssl", True)),
-        )
-    except Exception:
-        return None
+    from services.connection import get_tg_client
+    return get_tg_client()
 
 # ── Load data (cached) ─────────────────────────────────────────────────────
 @st.cache_data(show_spinner=False)
