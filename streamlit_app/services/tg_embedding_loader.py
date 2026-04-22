@@ -2,11 +2,17 @@
 TigerGraph embedding loader.
 
 Fetches pre-computed vector embeddings directly from TigerGraph by calling
-installed GSQL queries (Export_merchant_embeddings, Export_user_embeddings,
-Export_transaction_embeddings).
+installed GSQL export queries that use  PRINT <vertex_set> WITH VECTOR.
 
-The standard REST++ vertex endpoint does NOT return VECTOR attributes —
-installed GSQL queries that PRINT vertex sets DO return them.
+The  WITH VECTOR  clause (TigerGraph 4.1+) forces VECTOR attributes into the
+REST++ JSON response.  Without it the HNSW index is query-only and vectors
+never appear in vertex attribute payloads.
+
+Query → result-key mapping
+--------------------------
+  Export_merchant_embeddings   → "merchants"   (Merchant.embedding)
+  Export_user_embeddings       → "users"        (User.embedding)
+  Export_transaction_embeddings→ "txns"         (Transaction.risk_embedding / behaviour_emb)
 
 Usage
 -----
@@ -14,6 +20,7 @@ Usage
 
     merch_embs = fetch_embeddings_from_tg(client, "Merchant", "embedding")
     # returns {merchant_id: np.ndarray(384,)}
+    # returns {} if the query is not installed or WITH VECTOR is not supported
 """
 from __future__ import annotations
 
@@ -94,8 +101,24 @@ def fetch_embeddings_from_tg(
             break
 
     if not vertices:
-        log.warning("%s returned 0 vertices. Query may not be installed — run scripts/install_queries.py", query_name)
+        log.warning(
+            "%s returned 0 vertices. "
+            "Query may not be installed — run scripts/install_queries.py",
+            query_name,
+        )
         return {}
+
+    # Diagnostic: inspect first vertex to detect whether WITH VECTOR worked
+    sample_attrs = vertices[0].get("attributes", {}) if vertices else {}
+    if vector_attr not in sample_attrs:
+        present = list(sample_attrs.keys())
+        log.warning(
+            "WITH VECTOR: '%s' not in first %s vertex attributes. "
+            "Keys present: %s. "
+            "Either the query was not reinstalled after adding WITH VECTOR, "
+            "or this TigerGraph build does not support WITH VECTOR in PRINT.",
+            vector_attr, vertex_type, present,
+        )
 
     out: dict[str, np.ndarray] = {}
     missing_vec = 0
@@ -123,12 +146,21 @@ def fetch_embeddings_from_tg(
         if vec.ndim == 1 and len(vec) > 0:
             out[vid] = vec
 
-    if missing_vec:
+    if missing_vec and not out:
         log.warning(
-            "%d/%d %s vertices had no '%s' attribute in the response. "
-            "Ensure the VECTOR attribute is populated on TigerGraph.",
+            "All %d %s vertices had no '%s' attribute. "
+            "PRINT ... WITH VECTOR may not be returning the embedding on this build. "
+            "Falling back to local CSV files.",
+            len(vertices), vertex_type, vector_attr,
+        )
+    elif missing_vec:
+        log.warning(
+            "%d/%d %s vertices had no '%s' attribute.",
             missing_vec, len(vertices), vertex_type, vector_attr,
         )
 
-    log.info("Fetched %d %s embeddings (%s) from TigerGraph", len(out), vertex_type, vector_attr)
+    log.info(
+        "TigerGraph WITH VECTOR: fetched %d/%d %s embeddings (%s)",
+        len(out), len(vertices), vertex_type, vector_attr,
+    )
     return out

@@ -62,41 +62,43 @@ def load_all_embeddings(tg_client=None) -> tuple[
     merch_csv    = ROOT / "data" / "merchant_embeddings.csv"
     user_csv     = ROOT / "data" / "user_embeddings.csv"
 
-    # ── Transaction embeddings (risk + behaviour) ──────────────────────────
-    # Full file (78 MB, local only) → slim sample (16 MB, committed to git) → TigerGraph
-    txn_slim_csv = ROOT / "data" / "transaction_embeddings_slim.csv"
-    txn_source   = txn_risk_csv if txn_risk_csv.exists() else (txn_slim_csv if txn_slim_csv.exists() else None)
+    from services.tg_embedding_loader import fetch_embeddings_from_tg
 
-    if txn_source is not None:
-        txn_risk = load_embedding_dict(txn_source, "tran_sequence_number",
-                                       "transaction_text_risk")
-        txn_beh  = load_embedding_dict(txn_source, "tran_sequence_number",
-                                       "transaction_text_behavior")
-    elif tg_client is not None:
-        from services.tg_embedding_loader import fetch_embeddings_from_tg
-        txn_risk = fetch_embeddings_from_tg(tg_client, "Transaction", "risk_embedding")
-        txn_beh  = fetch_embeddings_from_tg(tg_client, "Transaction", "behaviour_emb")
-    else:
-        txn_risk = {}
-        txn_beh  = {}
+    def _from_tg_or_csv(vtype: str, attr: str, csv_path: Path,
+                         csv_id_col: str, csv_text_col: str) -> dict[str, np.ndarray]:
+        """Try TigerGraph (WITH VECTOR) first; fall back to local CSV."""
+        if tg_client is not None:
+            result = fetch_embeddings_from_tg(tg_client, vtype, attr)
+            if result:
+                return result
+        if csv_path.exists():
+            return load_embedding_dict(csv_path, csv_id_col, csv_text_col)
+        return {}
+
+    # ── Transaction embeddings (risk + behaviour) ──────────────────────────
+    txn_slim_csv = ROOT / "data" / "transaction_embeddings_slim.csv"
+    txn_source   = txn_risk_csv if txn_risk_csv.exists() else txn_slim_csv
+
+    txn_risk = _from_tg_or_csv(
+        "Transaction", "risk_embedding", txn_source,
+        "tran_sequence_number", "transaction_text_risk",
+    )
+    txn_beh = _from_tg_or_csv(
+        "Transaction", "behaviour_emb", txn_source,
+        "tran_sequence_number", "transaction_text_behavior",
+    )
 
     # ── Merchant embeddings ────────────────────────────────────────────────
-    if merch_csv.exists():
-        merch = load_embedding_dict(merch_csv, "merchant_id", "merchant_text_summary")
-    elif tg_client is not None:
-        from services.tg_embedding_loader import fetch_embeddings_from_tg
-        merch = fetch_embeddings_from_tg(tg_client, "Merchant", "embedding")
-    else:
-        merch = {}
+    merch = _from_tg_or_csv(
+        "Merchant", "embedding", merch_csv,
+        "merchant_id", "merchant_text_summary",
+    )
 
     # ── User embeddings ────────────────────────────────────────────────────
-    if user_csv.exists():
-        user = load_embedding_dict(user_csv, "userid", "user_text_summary")
-    elif tg_client is not None:
-        from services.tg_embedding_loader import fetch_embeddings_from_tg
-        user = fetch_embeddings_from_tg(tg_client, "User", "embedding")
-    else:
-        user = {}
+    user = _from_tg_or_csv(
+        "User", "embedding", user_csv,
+        "userid", "user_text_summary",
+    )
 
     return txn_risk, txn_beh, merch, user
 

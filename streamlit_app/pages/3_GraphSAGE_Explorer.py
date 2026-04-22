@@ -114,19 +114,23 @@ if not merch_embs or not user_embs:
     st.stop()
 
 txn_available = bool(txn_risk)
+_tg = _get_tg_client()
+_source_label = f"TigerGraph (`{_tg.host}`)" if _tg else "local CSV files"
+
 st.success(
     f"Loaded **{len(merch_embs):,}** merchant · "
     f"**{len(user_embs):,}** user · "
-    f"**{len(txn_risk):,}** transaction embeddings  |  "
+    f"**{len(txn_risk):,}** transaction embeddings  "
+    f"from **{_source_label}**  |  "
     f"**{sum(len(v) for v in merch_to_txn.values()):,}** merchant–transaction edges"
 )
 if not txn_available:
-    st.info(
-        "Transaction embeddings are not available in this deployment. "
-        "Merchant and User cluster tabs are fully functional. "
-        "Cold-Start, 2-Hop, and Similarity Probe tabs need transaction embeddings — "
-        "run locally with the full dataset to see those.",
-        icon="ℹ️",
+    st.warning(
+        "Transaction embeddings could not be loaded from TigerGraph or local CSV. "
+        "Merchant and User cluster tabs still work. "
+        "For Cold-Start, 2-Hop, and Similarity Probe: ensure TigerGraph credentials "
+        "are saved in the **Hybrid Search** sidebar and the export queries are installed.",
+        icon="⚠️",
     )
 
 # ── Module-level helpers (avoid redefining inside with-blocks) ──────────────

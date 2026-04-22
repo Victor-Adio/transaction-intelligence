@@ -98,23 +98,24 @@ def transaction_cluster_figure(
     extra_points: Optional[pd.DataFrame] = None,
     tg_client=None,
 ) -> go.Figure:
-    # Full (78 MB, local only) → slim sample (16 MB, committed to git) → TigerGraph
     csv_full = ROOT / "data" / "transaction_embeddings.csv"
     csv_slim = ROOT / "data" / "transaction_embeddings_slim.csv"
     vector_attr = "risk_embedding" if "risk" in text_col else "behaviour_emb"
 
-    if csv_full.exists():
+    # Priority: TigerGraph (WITH VECTOR) → full CSV → slim CSV
+    tg_df = _embeddings_from_tg_as_df(tg_client, "Transaction", vector_attr, "tran_sequence_number")
+    if tg_df is not None:
+        df = tg_df
+    elif csv_full.exists():
         df = load_embeddings(csv_full, "tran_sequence_number", text_col_filter=text_col)
     elif csv_slim.exists():
         df = load_embeddings(csv_slim, "tran_sequence_number", text_col_filter=text_col)
     else:
-        tg_df = _embeddings_from_tg_as_df(tg_client, "Transaction", vector_attr, "tran_sequence_number")
-        if tg_df is None:
-            raise FileNotFoundError(
-                "Transaction embedding CSV not found. "
-                "Commit `data/transaction_embeddings_slim.csv` to the repository to enable this view."
-            )
-        df = tg_df
+        raise FileNotFoundError(
+            "Transaction embeddings unavailable. "
+            "Connect TigerGraph in Hybrid Search sidebar, or commit "
+            "`data/transaction_embeddings_slim.csv` to the repository."
+        )
     if len(df) > sample_n:
         df = df.sample(sample_n, random_state=42).reset_index(drop=True)
 
@@ -181,15 +182,18 @@ def merchant_cluster_figure(
 ) -> go.Figure:
     csv = ROOT / "data" / "merchant_embeddings.csv"
 
-    if csv.exists():
+    # Priority: TigerGraph (WITH VECTOR) → local CSV
+    tg_df = _embeddings_from_tg_as_df(tg_client, "Merchant", "embedding", "merchant_id")
+    if tg_df is not None:
+        df = tg_df
+    elif csv.exists():
         df = load_embeddings(csv, "merchant_id", text_col_filter="merchant_text_summary")
     else:
-        tg_df = _embeddings_from_tg_as_df(tg_client, "Merchant", "embedding", "merchant_id")
-        if tg_df is None:
-            raise FileNotFoundError(
-                f"{csv}\n\nMerchant embedding CSV not found and no TigerGraph client provided."
-            )
-        df = tg_df
+        raise FileNotFoundError(
+            "Merchant embeddings unavailable. "
+            "Connect TigerGraph in Hybrid Search sidebar, or commit "
+            "`data/merchant_embeddings.csv` to the repository."
+        )
     mat    = vectors_to_matrix(df)
     coords = reduce_umap(mat, n_neighbors, min_dist)
     df["x"], df["y"] = coords[:, 0], coords[:, 1]
@@ -245,15 +249,18 @@ def user_cluster_figure(
 ) -> go.Figure:
     csv = ROOT / "data" / "user_embeddings.csv"
 
-    if csv.exists():
+    # Priority: TigerGraph (WITH VECTOR) → local CSV
+    tg_df = _embeddings_from_tg_as_df(tg_client, "User", "embedding", "userid")
+    if tg_df is not None:
+        df = tg_df
+    elif csv.exists():
         df = load_embeddings(csv, "userid", text_col_filter="user_text_summary")
     else:
-        tg_df = _embeddings_from_tg_as_df(tg_client, "User", "embedding", "userid")
-        if tg_df is None:
-            raise FileNotFoundError(
-                f"{csv}\n\nUser embedding CSV not found and no TigerGraph client provided."
-            )
-        df = tg_df
+        raise FileNotFoundError(
+            "User embeddings unavailable. "
+            "Connect TigerGraph in Hybrid Search sidebar, or commit "
+            "`data/user_embeddings.csv` to the repository."
+        )
     mat    = vectors_to_matrix(df)
     coords = reduce_umap(mat, n_neighbors, min_dist)
     df["x"], df["y"] = coords[:, 0], coords[:, 1]

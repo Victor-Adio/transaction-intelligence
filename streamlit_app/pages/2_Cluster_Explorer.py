@@ -70,31 +70,44 @@ with col_exp:
 
 st.markdown("---")
 
-# ── Data availability ────────────────────────────────────────────────────────
-_DATA_ROOT = Path(__file__).resolve().parents[2] / "data"
-_merch_csv = _DATA_ROOT / "merchant_embeddings.csv"
-_user_csv  = _DATA_ROOT / "user_embeddings.csv"
-_txn_full  = _DATA_ROOT / "transaction_embeddings.csv"
-_txn_slim  = _DATA_ROOT / "transaction_embeddings_slim.csv"
-_txn_ok    = _txn_full.exists() or _txn_slim.exists()
-
-if not (_merch_csv.exists() and _user_csv.exists() and _txn_ok):
-    missing = []
-    if not _merch_csv.exists(): missing.append("`merchant_embeddings.csv`")
-    if not _user_csv.exists():  missing.append("`user_embeddings.csv`")
-    if not _txn_ok:             missing.append("`transaction_embeddings_slim.csv`")
-    st.warning(
-        f"Some embedding files are missing: {', '.join(missing)}. "
-        "Cluster visualisations for those entities will not be available.",
-        icon="⚠️",
-    )
-
-# ── TigerGraph client (fallback only — VECTOR attrs not exposed via REST++) ──
+# ── TigerGraph client — primary source via WITH VECTOR ──────────────────────
 @st.cache_resource(show_spinner=False)
 def _get_tg_client():
     return get_tg_client()
 
 tg_client = _get_tg_client()
+
+# ── Data source banner ───────────────────────────────────────────────────────
+_DATA_ROOT = Path(__file__).resolve().parents[2] / "data"
+
+if tg_client is not None:
+    st.success(
+        f"**Live TigerGraph** · `{tg_client.host}` — "
+        "embeddings will be fetched from TigerGraph using `PRINT … WITH VECTOR`.",
+        icon="🔗",
+    )
+else:
+    # Identify which CSV fallbacks are available
+    _merch_csv = _DATA_ROOT / "merchant_embeddings.csv"
+    _user_csv  = _DATA_ROOT / "user_embeddings.csv"
+    _txn_ok    = (_DATA_ROOT / "transaction_embeddings.csv").exists() or \
+                 (_DATA_ROOT / "transaction_embeddings_slim.csv").exists()
+    missing = []
+    if not _merch_csv.exists(): missing.append("merchant")
+    if not _user_csv.exists():  missing.append("user")
+    if not _txn_ok:             missing.append("transaction")
+    if missing:
+        st.warning(
+            f"TigerGraph not connected and local CSV files missing for: **{', '.join(missing)}**. "
+            "Enter credentials in the **Hybrid Search** sidebar and click Save to connect.",
+            icon="⚠️",
+        )
+    else:
+        st.info(
+            "TigerGraph not connected — using pre-computed embedding CSV files. "
+            "Enter credentials in the **Hybrid Search** sidebar to switch to live data.",
+            icon="ℹ️",
+        )
 
 # ── Render ───────────────────────────────────────────────────────────────────
 with st.spinner("Computing UMAP projection… first run ~20 seconds"):

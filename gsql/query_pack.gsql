@@ -2,17 +2,17 @@ USE GRAPH Tran_graph
 
 CREATE OR REPLACE QUERY Export_merchant_embeddings() FOR GRAPH Tran_graph SYNTAX v2 {
   merchants = SELECT m FROM Merchant:m;
-  PRINT merchants;
+  PRINT merchants WITH VECTOR;
 }
 
 CREATE OR REPLACE QUERY Export_user_embeddings() FOR GRAPH Tran_graph SYNTAX v2 {
   users = SELECT u FROM User:u;
-  PRINT users;
+  PRINT users WITH VECTOR;
 }
 
 CREATE OR REPLACE QUERY Export_transaction_embeddings(INT batch_size = 5000) FOR GRAPH Tran_graph SYNTAX v2 {
   txns = SELECT t FROM Transaction:t LIMIT batch_size;
-  PRINT txns;
+  PRINT txns WITH VECTOR;
 }
 
 CREATE OR REPLACE QUERY Get_transaction_context(
