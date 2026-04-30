@@ -121,6 +121,41 @@ def clear_saved_connection() -> None:
         CONNECTION_STATE_FILE.unlink()
 
 
+def _connection_signature(config: dict[str, object]) -> tuple[str, str, str, bool]:
+    """Return a stable key for the active connection settings."""
+    return (
+        str(config.get("host", "")).strip(),
+        str(config.get("graph_name", "")).strip(),
+        str(config.get("username", "")).strip(),
+        bool(config.get("use_ssl", True)),
+    )
+
+
+def _connect_client(config: dict[str, object]) -> tuple[TigerGraphDemoClient | None, dict[str, Any]]:
+    """Create and validate a TigerGraph client for the current sidebar config."""
+    host = str(config.get("host", "")).strip()
+    secret = str(config.get("password", "")).strip()
+    if not host:
+        return None, {"ok": False, "message": "Enter your TigerGraph host URL."}
+    if not secret:
+        return None, {"ok": False, "message": "Enter your TigerGraph secret."}
+
+    try:
+        client = TigerGraphDemoClient(
+            host=host,
+            graph_name=str(config.get("graph_name", "Tran_graph")),
+            username=str(config.get("username", "")),
+            password=secret,
+            use_ssl=bool(config.get("use_ssl", True)),
+        )
+        ping = client.ping()
+        if not ping.get("ok"):
+            return None, {"ok": False, "message": str(ping.get("error", "Connection test failed."))}
+        return client, {"ok": True, "message": "Connected to TigerGraph successfully.", "details": ping}
+    except Exception as e:
+        return None, {"ok": False, "message": str(e)}
+
+
 # ── Data extraction helpers ────────────────────────────────────────────────
 
 def _currency_label(code: Any) -> str:
@@ -436,6 +471,7 @@ def render_sidebar() -> dict[str, object]:
     if c2.button("🗑 Clear", use_container_width=True):
         clear_saved_connection()
         st.sidebar.success("Cleared.")
+    connect_clicked = st.sidebar.button("🔌 Connect to TigerGraph", type="primary", use_container_width=True)
 
     return {
         "mode": mode, "mode_cfg": mode_cfg,
@@ -443,6 +479,7 @@ def render_sidebar() -> dict[str, object]:
         "host": host, "graph_name": graph_name, "username": username,
         "password": password, "use_ssl": use_ssl, "save_password": save_pwd,
         "remember_connection": bool(saved),
+        "connect_clicked": connect_clicked,
     }
 
 
@@ -468,9 +505,37 @@ def main() -> None:
 
     config   = render_sidebar()
     mode_cfg = config["mode_cfg"]
+    conn_sig = _connection_signature(config)
+
+    if "tg_connection_status" not in st.session_state:
+        st.session_state["tg_connection_status"] = {"ok": False, "message": "Not connected."}
+    if "tg_connection_signature" not in st.session_state:
+        st.session_state["tg_connection_signature"] = None
+    if "tg_client" not in st.session_state:
+        st.session_state["tg_client"] = None
+
+    # Clear stale connection state when host/graph/user/SSL changes.
+    if st.session_state["tg_connection_signature"] != conn_sig:
+        st.session_state["tg_connection_status"] = {"ok": False, "message": "Connection not tested for current settings."}
+        st.session_state["tg_client"] = None
+        st.session_state["tg_connection_signature"] = conn_sig
+
+    if bool(config.get("connect_clicked")):
+        with st.spinner("Connecting to TigerGraph…"):
+            client, status = _connect_client(config)
+        st.session_state["tg_connection_status"] = status
+        st.session_state["tg_client"] = client if status.get("ok") else None
 
     # ── Mode description banner ────────────────────────────────────────────
     st.info(f"**{config['mode']}** — {mode_cfg['description']}")
+
+    # ── Connection banner ──────────────────────────────────────────────────
+    conn_status = st.session_state.get("tg_connection_status", {})
+    conn_message = str(conn_status.get("message", "Not connected."))
+    if conn_status.get("ok"):
+        st.success(f"TigerGraph status: {conn_message}")
+    else:
+        st.error(f"TigerGraph status: {conn_message}")
 
     # ── Search plan strip ──────────────────────────────────────────────────
     c1, c2, c3, c4 = st.columns(4)
@@ -510,15 +575,15 @@ def main() -> None:
             query_vector = embedder.encode_query(config["query_text"])
 
         # ── Connect ────────────────────────────────────────────────────────
-        try:
-            client = TigerGraphDemoClient(
-                host=config["host"], graph_name=config["graph_name"],
-                username=config["username"], password=config["password"],
-                use_ssl=config["use_ssl"],
-            )
-        except Exception as e:
-            st.error(f"Connection failed: {e}")
-            return
+        client = st.session_state.get("tg_client")
+        if client is None:
+            with st.spinner("Connecting to TigerGraph…"):
+                client, status = _connect_client(config)
+            st.session_state["tg_connection_status"] = status
+            st.session_state["tg_client"] = client if status.get("ok") else None
+            if client is None:
+                st.error(f"Connection failed: {status.get('message', 'Unknown error')}")
+                return
 
         # ── Vector search ──────────────────────────────────────────────────
         with st.spinner(f"Vector search on `{mode_cfg['vertex_type']}.{mode_cfg['vector_attribute']}`…"):
